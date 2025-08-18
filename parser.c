@@ -1,0 +1,272 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "lexer.h"
+
+// definicja struktur - uproszczone
+typedef struct ASTNode {
+    int type; // 1=print, 2=input, 3=assignment, 4=if, 5=expression
+    
+    // dla print
+    struct ASTNode *print_expression;
+    
+    // dla input
+    char *input_identifier;
+    
+    // dla assignment
+    char *assign_identifier;
+    struct ASTNode *assign_expression;
+    
+    // dla if
+    struct ASTNode *if_condition;
+    struct ASTNode *if_body;
+    
+    // dla expression
+    int expr_type; // 1=binary, 2=number, 3=identifier
+    struct ASTNode *expr_left;
+    char expr_op;
+    struct ASTNode *expr_right;
+    int expr_number;
+    char *expr_identifier;
+    
+    struct ASTNode *next;
+} ASTNode;
+
+// funkcja tworzaca nowy wezel AST
+ASTNode *create_node(){
+    ASTNode *node = malloc(sizeof(ASTNode));
+    if(!node){
+        printf("Brak pamieci na wezel AST\n");
+        return NULL;
+    }
+    
+    // zerujemy wszystko
+    node->type = 0;
+    node->print_expression = NULL;
+    node->input_identifier = NULL;
+    node->assign_identifier = NULL;
+    node->assign_expression = NULL;
+    node->if_condition = NULL;
+    node->if_body = NULL;
+    node->expr_type = 0;
+    node->expr_left = NULL;
+    node->expr_op = 0;
+    node->expr_right = NULL;
+    node->expr_number = 0;
+    node->expr_identifier = NULL;
+    node->next = NULL;
+    
+    return node;
+}
+
+// zwalnia pamiec uzywana przez wezel AST
+void free_node(ASTNode *node){
+    while(node){
+        ASTNode *next_node = node->next;
+        
+        if(node->type == 1) { // print
+            free_node(node->print_expression);
+        }
+        else if(node->type == 2) { // input
+            if(node->input_identifier) free(node->input_identifier);
+        }
+        else if(node->type == 3) { // assignment
+            if(node->assign_identifier) free(node->assign_identifier);
+            free_node(node->assign_expression);
+        }
+        else if(node->type == 4) { // if
+            free_node(node->if_condition);
+            free_node(node->if_body);
+        }
+        else if(node->type == 5) { // expression
+            if(node->expr_type == 1) { // binary
+                free_node(node->expr_left);
+                free_node(node->expr_right);
+            }
+            else if(node->expr_type == 3) { // identifier
+                if(node->expr_identifier) free(node->expr_identifier);
+            }
+        }
+        
+        free(node);
+        node = next_node;
+    }
+}
+
+typedef struct {
+    Token *tokens;
+    int position;
+} Parser;
+
+// funkcja tworzaca nowy parser
+Parser *create_parser(Token *tokens){
+    Parser *parser = malloc(sizeof(Parser));
+    parser->tokens = tokens;
+    parser->position = 0;
+    return parser;
+}
+
+// zwolnienie pamieci uzywanej przez parser
+void free_parser(Parser *parser){
+    if(parser){
+        free(parser);
+    }
+}
+
+// funkcja zwraca aktualny token
+Token *current_token(Parser *parser){
+    return &parser->tokens[parser->position];
+}
+
+// funkcja przesuwa parser do nastepnego tokenu
+Token *next_token(Parser *parser){
+    parser->position++;
+    return current_token(parser);
+}
+
+// funkcja oczekujaca konkretnego typu tokenu
+Token *expect_token(Parser *parser, TokenType type){
+    Token *token = current_token(parser);
+    if(token->type != type){
+        printf("Oczekiwano token typu %d, ale dostano %d\n", type, token->type);
+        exit(1);
+    }
+    next_token(parser);
+    return token; 
+}
+
+// funkcja parsujaca wyrazenia
+ASTNode *parse_expression(Parser *parser){
+    Token *token = current_token(parser);
+    if(token->type == TOKEN_NUMBER){
+        ASTNode *node = create_node();
+        node->type = 5; // expression
+        node->expr_type = 2; // number
+        node->expr_number = atoi(token->value);
+        next_token(parser);
+        return node;
+    }
+    else if (token->type == TOKEN_IDENTIFIER){
+        ASTNode *node = create_node();
+        node->type = 5; // expression
+        node->expr_type = 3; // identifier
+        node->expr_identifier = malloc(strlen(token->value) + 1);
+        strcpy(node->expr_identifier, token->value);
+        next_token(parser);
+        return node;
+    }
+    else {
+        printf("Nieoczekiwany token w wyrazeniu: %s\n", token->value);
+        exit(1);
+    }
+}
+
+ASTNode *parse_print_statement(Parser *parser){
+    expect_token(parser, TOKEN_PRINT);
+    expect_token(parser, TOKEN_LPAREN);
+    ASTNode *expression = parse_expression(parser);
+    expect_token(parser, TOKEN_RPAREN);
+    expect_token(parser, TOKEN_SEMICOLON);
+
+    ASTNode *node = create_node();
+    node->type = 1; // print
+    node->print_expression = expression;
+
+    return node;
+}
+
+ASTNode *parse_input_statement(Parser *parser){
+    expect_token(parser, TOKEN_INPUT);
+    expect_token(parser, TOKEN_LPAREN);
+    Token *identifier = expect_token(parser, TOKEN_IDENTIFIER); 
+    expect_token(parser, TOKEN_RPAREN);
+    expect_token(parser, TOKEN_SEMICOLON);
+
+    ASTNode *node = create_node();
+    node->type = 2; // input
+    node->input_identifier = malloc(strlen(identifier->value) + 1);
+    strcpy(node->input_identifier, identifier->value);
+    
+    return node;
+}
+
+ASTNode *parse_assignment(Parser *parser){
+    Token *identifier = expect_token(parser, TOKEN_IDENTIFIER);
+    expect_token(parser, TOKEN_ASSIGN);
+    ASTNode *expression = parse_expression(parser);
+    expect_token(parser, TOKEN_SEMICOLON);
+
+    ASTNode *node = create_node();
+    node->type = 3; // assignment
+    node->assign_identifier = malloc(strlen(identifier->value) + 1);
+    strcpy(node->assign_identifier, identifier->value);
+    node->assign_expression = expression;
+
+    return node;
+}
+
+ASTNode *parse_if_statement(Parser *parser){
+    expect_token(parser, TOKEN_IF); 
+    expect_token(parser, TOKEN_LPAREN);
+    ASTNode *condition = parse_expression(parser);
+    expect_token(parser, TOKEN_RPAREN);
+    expect_token(parser, TOKEN_LBRACE);
+
+    ASTNode *body = create_node();
+    body->type = 4; // if
+    
+    while(current_token(parser)->type != TOKEN_RBRACE){
+        ASTNode *statement = parse_print_statement(parser);
+        body->if_body = statement;
+    }
+
+    expect_token(parser, TOKEN_RBRACE);
+
+    ASTNode *node = create_node();
+    node->type = 4; // if
+    node->if_condition = condition;
+    node->if_body = body;
+
+    return node;
+}
+
+ASTNode *parse_statement(Parser *parser){
+    Token *token = current_token(parser);
+    if(token->type == TOKEN_PRINT){
+        return parse_print_statement(parser);
+    }
+    else if(token->type == TOKEN_INPUT){
+        return parse_input_statement(parser);
+    }
+    else if(token->type == TOKEN_IDENTIFIER){
+        return parse_assignment(parser);
+    }
+    else if(token->type == TOKEN_IF){
+        return parse_if_statement(parser);
+    }
+    else {
+        printf("Nieoczekiwany token w instrukcji: %s\n", token->value);
+        exit(1);
+    }
+}
+
+ASTNode *parse_program(Parser *parser) {
+    ASTNode *program = NULL;
+    ASTNode *last_statement = NULL;
+    
+    while (1) {
+        if (current_token(parser)->type == TOKEN_END) {
+            break;
+        }
+        ASTNode *statement = parse_statement(parser);
+        if (!statement) break;
+        
+        if (!program) {
+            program = statement;
+        } else {
+            last_statement->next = statement;
+        }
+        last_statement = statement;
+    }
+    return program;
+}
