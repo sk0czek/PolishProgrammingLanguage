@@ -2,6 +2,8 @@
 #include<ctype.h>
 #include<string.h>
 #include<stdlib.h>
+#include<errno.h>
+#include<limits.h>
 #include "lexer.h"
 #include "parser.h"
 
@@ -13,7 +15,16 @@ typedef struct {
 // tworzy nowa zmienna
 Variable *create_variable(const char *name, int value){
     Variable *variable = malloc(sizeof(Variable));
+    if(!variable){
+        printf("Brak pamieci na zmienna\n");
+        exit(1);
+    }
     variable->name = malloc(strlen(name) + 1);
+    if(!variable->name){
+        printf("Brak pamieci na nazwe zmiennej\n");
+        free(variable);
+        exit(1);
+    }
     strcpy(variable->name, name);
     variable->value = value;
 
@@ -35,8 +46,12 @@ typedef struct {
 } Environment;
 
 // tworzy srodowisko
-Environment *create_environment(){
+Environment *create_environment(void){
     Environment *env = malloc(sizeof(Environment));
+    if(!env){
+        printf("Brak pamieci na srodowisko\n");
+        exit(1);
+    }
     env->variables = NULL;
     env->count = 0;
 
@@ -66,7 +81,13 @@ Variable *find_variable(Environment *env, const char *name){
 
 // dodaje nowa zmienna do srodowiska
 void add_variables(Environment *env, Variable *variable){
-    env->variables = realloc(env->variables, (env->count + 1) * sizeof(Variable *));
+    Variable **variables = realloc(env->variables, (env->count + 1) * sizeof(Variable *));
+    if(!variables){
+        printf("Brak pamieci na tablice zmiennych\n");
+        free_variable(variable);
+        exit(1);
+    }
+    env->variables = variables;
     env->variables[env->count] = variable;
     env->count++;
 }
@@ -94,23 +115,37 @@ int evaluate_expression(Environment *env, ASTNode *node){
     else if(node->expr_type == 1) { // binary
         int left = evaluate_expression(env, node->expr_left);
         int right = evaluate_expression(env, node->expr_right);
+        long long result;
         
         if(node->expr_op == '+') {
-            return left + right;
+            result = (long long)left + right;
         }
         else if(node->expr_op == '-') {
-            return left - right;
+            result = (long long)left - right;
         }
         else if(node->expr_op == '*') {
-            return left * right;
+            result = (long long)left * right;
         }
         else if(node->expr_op == '/') {
+            if(right == 0){
+                printf("Dzielenie przez zero\n");
+                exit(1);
+            }
+            if(left == INT_MIN && right == -1){
+                printf("Wynik poza zakresem typu int\n");
+                exit(1);
+            }
             return left / right;
         }
         else {
             printf("Nieznany operator: %c\n", node->expr_op);
             exit(1);
         }
+        if(result < INT_MIN || result > INT_MAX){
+            printf("Wynik poza zakresem typu int\n");
+            exit(1);
+        }
+        return (int)result;
     }
     else {
         printf("Nieznany typ wyrazenia\n");
@@ -124,9 +159,26 @@ void interpret_statement(Environment *env, ASTNode *node){
         printf("%d\n", value);
     }
     else if(node->type == 2) { // input
-        int value;
+        char input[128];
         printf("Podaj wartosc dla %s: ", node->input_identifier);
-        scanf("%d", &value);
+        fflush(stdout);
+        if(scanf("%127s", input) != 1){
+            printf("Nie udalo sie odczytac liczby\n");
+            exit(1);
+        }
+        int c = getchar();
+        if(c != EOF && !isspace((unsigned char)c)){
+            printf("Podana liczba jest zbyt dluga\n");
+            exit(1);
+        }
+        char *end;
+        errno = 0;
+        long number = strtol(input, &end, 10);
+        if(errno == ERANGE || *end != '\0' || number < INT_MIN || number > INT_MAX){
+            printf("Nieprawidlowa liczba: %s\n", input);
+            exit(1);
+        }
+        int value = (int)number;
 
         Variable *variable = find_variable(env, node->input_identifier);
         if(variable){
@@ -149,7 +201,11 @@ void interpret_statement(Environment *env, ASTNode *node){
     else if(node->type == 4) { // if
         int condition = evaluate_expression(env, node->if_condition);
         if(condition != 0) { // jezeli warunek jest prawdziwy
-            interpret_statement(env, node->if_body);
+            ASTNode *current = node->if_body;
+            while(current){
+                interpret_statement(env, current);
+                current = current->next;
+            }
         }
     }
     else {

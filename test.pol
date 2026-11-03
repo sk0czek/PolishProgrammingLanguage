@@ -2,3 +2,4 @@ b=10;
 wyswietl(b);
 podaj(x);
 wyswietl(x);
+

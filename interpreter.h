@@ -20,7 +20,7 @@ typedef struct {
 
 Variable *create_variable(const char *name, int value);
 void free_variable(Variable *variable);
-Environment *create_environment();
+Environment *create_environment(void);
 void free_environment(Environment *env);
 Variable *find_variable(Environment *env, const char *name);
 void add_variables(Environment *env, Variable *variable);

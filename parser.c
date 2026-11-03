@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+#include <limits.h>
 #include "lexer.h"
 
 // definicja struktur - uproszczone
@@ -33,11 +35,11 @@ typedef struct ASTNode {
 } ASTNode;
 
 // funkcja tworzaca nowy wezel AST
-ASTNode *create_node(){
+ASTNode *create_node(void){
     ASTNode *node = malloc(sizeof(ASTNode));
     if(!node){
         printf("Brak pamieci na wezel AST\n");
-        return NULL;
+        exit(1);
     }
     
     // zerujemy wszystko
@@ -101,6 +103,10 @@ typedef struct {
 // funkcja tworzaca nowy parser
 Parser *create_parser(Token *tokens){
     Parser *parser = malloc(sizeof(Parser));
+    if(!parser){
+        printf("Brak pamieci na parser\n");
+        exit(1);
+    }
     parser->tokens = tokens;
     parser->position = 0;
     return parser;
@@ -135,30 +141,126 @@ Token *expect_token(Parser *parser, TokenType type){
     return token; 
 }
 
-// funkcja parsujaca wyrazenia
-ASTNode *parse_expression(Parser *parser){
+ASTNode *parse_expression(Parser *parser);
+ASTNode *parse_statement(Parser *parser);
+
+// odczytuje liczbe z uwzglednieniem zakresu typu int
+static ASTNode *parse_number(Parser *parser, int negative){
+    Token *token = current_token(parser);
+    char *end;
+    errno = 0;
+    unsigned long value = strtoul(token->value, &end, 10);
+    unsigned long limit = negative ? (unsigned long)(-(INT_MIN + 1)) + 1 : (unsigned long)INT_MAX;
+    if(errno == ERANGE || *end != '\0' || value > limit){
+        printf("Liczba poza zakresem typu int: %s\n", token->value);
+        exit(1);
+    }
+
+    ASTNode *node = create_node();
+    node->type = 5; // expression
+    node->expr_type = 2; // number
+    if(negative){
+        node->expr_number = value == limit ? INT_MIN : -(int)value;
+    }
+    else {
+        node->expr_number = (int)value;
+    }
+    next_token(parser);
+    return node;
+}
+
+// liczba, zmienna lub wyrazenie w nawiasach
+static ASTNode *parse_primary(Parser *parser){
     Token *token = current_token(parser);
     if(token->type == TOKEN_NUMBER){
-        ASTNode *node = create_node();
-        node->type = 5; // expression
-        node->expr_type = 2; // number
-        node->expr_number = atoi(token->value);
-        next_token(parser);
-        return node;
+        return parse_number(parser, 0);
     }
     else if (token->type == TOKEN_IDENTIFIER){
         ASTNode *node = create_node();
         node->type = 5; // expression
         node->expr_type = 3; // identifier
         node->expr_identifier = malloc(strlen(token->value) + 1);
+        if(!node->expr_identifier){
+            printf("Brak pamieci na nazwe zmiennej\n");
+            exit(1);
+        }
         strcpy(node->expr_identifier, token->value);
         next_token(parser);
         return node;
     }
+    else if(token->type == TOKEN_LPAREN){
+        next_token(parser);
+        ASTNode *node = parse_expression(parser);
+        expect_token(parser, TOKEN_RPAREN);
+        return node;
+    }
     else {
-        printf("Nieoczekiwany token w wyrazeniu: %s\n", token->value);
+        printf("Nieoczekiwany token w wyrazeniu: %s\n", token->value ? token->value : "koniec pliku");
         exit(1);
     }
+}
+
+// plus i minus przed liczba, zmienna lub nawiasem
+static ASTNode *parse_unary(Parser *parser){
+    TokenType type = current_token(parser)->type;
+    if(type == TOKEN_PLUS || type == TOKEN_MINUS){
+        next_token(parser);
+        if(type == TOKEN_PLUS){
+            return parse_unary(parser);
+        }
+        if(current_token(parser)->type == TOKEN_NUMBER){
+            return parse_number(parser, 1);
+        }
+
+        ASTNode *zero = create_node();
+        zero->type = 5; // expression
+        zero->expr_type = 2; // number
+
+        ASTNode *node = create_node();
+        node->type = 5; // expression
+        node->expr_type = 1; // binary
+        node->expr_op = '-';
+        node->expr_left = zero;
+        node->expr_right = parse_unary(parser);
+        return node;
+    }
+    return parse_primary(parser);
+}
+
+// mnozenie i dzielenie maja wyzszy priorytet
+static ASTNode *parse_term(Parser *parser){
+    ASTNode *left = parse_unary(parser);
+    while(current_token(parser)->type == TOKEN_STAR || current_token(parser)->type == TOKEN_SLASH){
+        char op = current_token(parser)->value[0];
+        next_token(parser);
+
+        ASTNode *node = create_node();
+        node->type = 5; // expression
+        node->expr_type = 1; // binary
+        node->expr_op = op;
+        node->expr_left = left;
+        node->expr_right = parse_unary(parser);
+        left = node;
+    }
+    return left;
+}
+
+// funkcja parsujaca wyrazenia
+ASTNode *parse_expression(Parser *parser){
+    ASTNode *left = parse_term(parser);
+    while(current_token(parser)->type == TOKEN_PLUS || current_token(parser)->type == TOKEN_MINUS){
+        char op = current_token(parser)->value[0];
+        next_token(parser);
+
+        ASTNode *node = create_node();
+        node->type = 5; // expression
+        node->expr_type = 1; // binary
+        node->expr_op = op;
+        node->expr_left = left;
+        node->expr_right = parse_term(parser);
+        left = node;
+    }
+    return left;
 }
 
 ASTNode *parse_print_statement(Parser *parser){
@@ -185,6 +287,10 @@ ASTNode *parse_input_statement(Parser *parser){
     ASTNode *node = create_node();
     node->type = 2; // input
     node->input_identifier = malloc(strlen(identifier->value) + 1);
+    if(!node->input_identifier){
+        printf("Brak pamieci na nazwe zmiennej\n");
+        exit(1);
+    }
     strcpy(node->input_identifier, identifier->value);
     
     return node;
@@ -199,6 +305,10 @@ ASTNode *parse_assignment(Parser *parser){
     ASTNode *node = create_node();
     node->type = 3; // assignment
     node->assign_identifier = malloc(strlen(identifier->value) + 1);
+    if(!node->assign_identifier){
+        printf("Brak pamieci na nazwe zmiennej\n");
+        exit(1);
+    }
     strcpy(node->assign_identifier, identifier->value);
     node->assign_expression = expression;
 
@@ -212,12 +322,22 @@ ASTNode *parse_if_statement(Parser *parser){
     expect_token(parser, TOKEN_RPAREN);
     expect_token(parser, TOKEN_LBRACE);
 
-    ASTNode *body = create_node();
-    body->type = 4; // if
+    ASTNode *body = NULL;
+    ASTNode *last_statement = NULL;
     
     while(current_token(parser)->type != TOKEN_RBRACE){
-        ASTNode *statement = parse_print_statement(parser);
-        body->if_body = statement;
+        if(current_token(parser)->type == TOKEN_END){
+            printf("Brak zamykajacego nawiasu }\n");
+            exit(1);
+        }
+        ASTNode *statement = parse_statement(parser);
+        if(!body){
+            body = statement;
+        }
+        else {
+            last_statement->next = statement;
+        }
+        last_statement = statement;
     }
 
     expect_token(parser, TOKEN_RBRACE);
@@ -245,7 +365,7 @@ ASTNode *parse_statement(Parser *parser){
         return parse_if_statement(parser);
     }
     else {
-        printf("Nieoczekiwany token w instrukcji: %s\n", token->value);
+        printf("Nieoczekiwany token w instrukcji: %s\n", token->value ? token->value : "koniec pliku");
         exit(1);
     }
 }

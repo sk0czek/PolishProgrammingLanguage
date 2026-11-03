@@ -25,13 +25,28 @@ int main(int argc, char *argv[]){
     // czytamy plik
     char source_code[1000]; // duzy bufor na kod
     int i = 0;
-    char c;
+    int c;
     
-    while ((c = fgetc(file)) != EOF && i < 999) {
-        source_code[i] = c;
+    while ((c = fgetc(file)) != EOF) {
+        if(i >= 999){
+            printf("Plik jest zbyt dlugi (maksymalnie 999 bajtow)\n");
+            fclose(file);
+            return 1;
+        }
+        if(c == '\0'){
+            printf("Niedozwolony znak w pliku\n");
+            fclose(file);
+            return 1;
+        }
+        source_code[i] = (char)c;
         i++;
     }
     source_code[i] = '\0';
+    if(ferror(file)){
+        printf("Blad odczytu pliku %s\n", filename);
+        fclose(file);
+        return 1;
+    }
     
     fclose(file);
     

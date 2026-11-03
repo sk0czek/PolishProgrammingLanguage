@@ -39,7 +39,7 @@ typedef struct {
     int position;
 } Parser;
 
-ASTNode *create_node();
+ASTNode *create_node(void);
 void free_node(ASTNode *node);
 Parser *create_parser(Token *tokens);
 void free_parser(Parser *parser);
