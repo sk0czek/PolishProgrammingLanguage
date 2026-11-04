@@ -1,0 +1,12 @@
+a = 20;
+b = 3;
+
+wyswietl(2 + b * 4);     // 14
+wyswietl((2 + b) * 4);   // 20
+wyswietl(a - 5 - b);     // 12
+wyswietl(a / 5 / 2);     // 2
+wyswietl(7 / 2);         // 3: integer division.
+wyswietl(-7 / 2);        // -3: division truncates toward zero.
+wyswietl(-b);            // -3
+wyswietl(-(2 + b));      // -5
+wyswietl(+b);            // 3

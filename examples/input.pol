@@ -1,0 +1,7 @@
+// Enter 3 and 4 to print 7 and 12.
+a = 10;
+podaj(a);
+podaj(b);
+
+wyswietl(a + b);
+wyswietl(a * b);

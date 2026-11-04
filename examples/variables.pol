@@ -1,0 +1,6 @@
+a = 10;
+b = a;
+a = a + 5;
+
+wyswietl(a); // 15
+wyswietl(b); // 10: b keeps the value copied from a.

@@ -2,25 +2,22 @@
 #include<ctype.h>
 #include<string.h>
 #include<stdlib.h>
+#include<stdint.h>
 
-// definiowanie typow tokenow, ktore lekser moze rozpoznac
 typedef enum {
     TOKEN_PLUS, TOKEN_MINUS, TOKEN_STAR, TOKEN_SLASH, TOKEN_NUMBER, TOKEN_PRINT, TOKEN_INPUT, TOKEN_IF, TOKEN_ASSIGN, TOKEN_LBRACE, TOKEN_RBRACE, TOKEN_LPAREN, TOKEN_RPAREN , TOKEN_SEMICOLON, TOKEN_END, TOKEN_IDENTIFIER
 } TokenType;
 
-// struktra reprezentujaca stan lexera, zawiera zrodlowy ciag znakow oraz aktualna pozycje
 typedef struct {
     char *source;
-    int position;
+    size_t position;
 } Lexer;
 
-// struktura reprezentujaca tokem, zawiera typ tokenu oraz jego warrtosc
 typedef struct {
     TokenType type;
     char *value;
 } Token;
 
-// funkcja tworzaca token
 Token *create_token(TokenType type, const char *value){
     Token *token = malloc(sizeof(Token));
     if(!token){
@@ -38,7 +35,6 @@ Token *create_token(TokenType type, const char *value){
     return token;
 }
 
-// funkcja zwalniająca pamiec uzyta przez token
 void free_token(Token *token){
     if(token) {
         free(token->value);
@@ -46,9 +42,8 @@ void free_token(Token *token){
     }
 }
 
-// funkcja zwalniajaca pamiec dla calej tablicy tokenow
 void free_tokens(Token *tokens) {
-    int i = 0;
+    size_t i = 0;
     while(tokens[i].type != TOKEN_END) {
         if(tokens[i].value) {
             free(tokens[i].value);
@@ -58,7 +53,6 @@ void free_tokens(Token *tokens) {
     free(tokens);
 }
 
-// funkcja tworzaca nowy lexer
 Lexer *create_lexer(const char *source){
     Lexer *lexer = malloc(sizeof(Lexer));
     if(!lexer){
@@ -76,7 +70,6 @@ Lexer *create_lexer(const char *source){
     return lexer;
 }
 
-//funkcja zwalniajaca pamiec uzywana przez lexer
 void free_lexer(Lexer *lexer){
     if(lexer){
         free(lexer->source);
@@ -84,7 +77,6 @@ void free_lexer(Lexer *lexer){
     }
 }
 
-// funkcja generujaca nastenpny token na podstawie zrodlowego ciagu znakow
 Token *lexer_next_token(Lexer *lexer){
     while(lexer->source[lexer->position] != '\0'){
         char current = lexer->source[lexer->position];
@@ -102,19 +94,19 @@ Token *lexer_next_token(Lexer *lexer){
         }
 
         if(isalpha((unsigned char)current)){
-            int start = lexer->position;
+            size_t start = lexer->position;
             while(isalnum((unsigned char)lexer->source[lexer->position])){
                 lexer->position++;
             }
 
-            int length = lexer->position - start;
+            size_t length = lexer->position - start;
             char *identifier = malloc(length + 1);
             if(!identifier){
                 printf("Brak pamieci na identyfikator\n");
                 exit(1);
             }
-            int j = 0;
-            for(int i = start; i < lexer->position; i++) {
+            size_t j = 0;
+            for(size_t i = start; i < lexer->position; i++) {
                 identifier[j] = lexer->source[i];
                 j++;
             }
@@ -130,9 +122,9 @@ Token *lexer_next_token(Lexer *lexer){
                 return create_token(TOKEN_INPUT, "podaj");
             }
 
-            if(strcmp(identifier, "if") == 0){
+            if(strcmp(identifier, "jezeli") == 0){
                 free(identifier);
-                return create_token(TOKEN_IF, "if");
+                return create_token(TOKEN_IF, "jezeli");
             }
 
             Token *token = create_token(TOKEN_IDENTIFIER, identifier);
@@ -141,20 +133,20 @@ Token *lexer_next_token(Lexer *lexer){
         }
         
         if(isdigit((unsigned char)current)){
-            int start = lexer->position;
+            size_t start = lexer->position;
 
             while(isdigit((unsigned char)lexer->source[lexer->position])){
                 lexer->position++;
             }
 
-            int length = lexer->position - start;
+            size_t length = lexer->position - start;
             char *number = malloc(length + 1);
             if(!number){
                 printf("Brak pamieci na liczbe\n");
                 exit(1);
             }
-            int j = 0;
-            for(int i = start; i < lexer->position; i++) {
+            size_t j = 0;
+            for(size_t i = start; i < lexer->position; i++) {
                 number[j] = lexer->source[i];
                 j++;
             }
@@ -185,19 +177,35 @@ Token *lexer_next_token(Lexer *lexer){
 }
 
 Token *tokenize(Lexer *lexer) {
-    Token tokens[1000]; // duzy bufor na tokeny
-    int token_count = 0;
+    size_t capacity = 128;
+    Token *tokens = malloc(capacity * sizeof(Token));
+    if(!tokens){
+        printf("Brak pamieci na tablice tokenow\n");
+        exit(1);
+    }
+    size_t token_count = 0;
 
     Token *token;
 
     while ((token = lexer_next_token(lexer))->type != TOKEN_END) {
-        if (token_count >= 999) {
-            printf("Zbyt wiele tokenow (maksymalnie 999)\n");
-            free_token(token);
-            exit(1);
+        // Reserve space for the end-of-input token.
+        if (token_count == capacity - 1) {
+            if(capacity > SIZE_MAX / 2 / sizeof(Token)){
+                printf("Zbyt wiele tokenow\n");
+                free_token(token);
+                exit(1);
+            }
+            size_t new_capacity = capacity * 2;
+            Token *new_tokens = realloc(tokens, new_capacity * sizeof(Token));
+            if(!new_tokens){
+                printf("Brak pamieci na tablice tokenow\n");
+                free_token(token);
+                exit(1);
+            }
+            tokens = new_tokens;
+            capacity = new_capacity;
         }
 
-        // Kopiowanie tokenu
         tokens[token_count].type = token->type;
         if (token->value) {
             tokens[token_count].value = malloc(strlen(token->value) + 1);
@@ -215,21 +223,9 @@ Token *tokenize(Lexer *lexer) {
         free_token(token);
     }
 
-    // Przechowywanie tokenu TOKEN_END
     tokens[token_count].type = TOKEN_END;
     tokens[token_count].value = NULL;
-    token_count++;
     free_token(token);
 
-    // kopiujemy do dynamicznej tablicy
-    Token *result = malloc(token_count * sizeof(Token));
-    if(!result){
-        printf("Brak pamieci na tablice tokenow\n");
-        exit(1);
-    }
-    for(int i = 0; i < token_count; i++) {
-        result[i] = tokens[i];
-    }
-
-    return result;
+    return tokens;
 }

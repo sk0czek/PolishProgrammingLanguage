@@ -1,29 +1,27 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -g
 
-TARGET = polisz
-SRCS = main.c lexer.c parser.c interpreter.c
-OBJS = $(SRCS:.c=.o)
-HEADERS = lexer.h parser.h interpreter.h
+TARGET = build/polisz
+SRCS = src/main.c src/lexer.c src/parser.c src/interpreter.c
+OBJS = $(SRCS:src/%.c=build/%.o)
+HEADERS = src/lexer.h src/parser.h src/interpreter.h
+EXAMPLES = $(wildcard examples/*.pol)
 
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS)
 
-main.o: main.c $(HEADERS)
-	$(CC) $(CFLAGS) -c main.c
+$(EXAMPLES): $(TARGET)
+	./$(TARGET) "$@"
 
-lexer.o: lexer.c lexer.h
-	$(CC) $(CFLAGS) -c lexer.c
+build/%.o: src/%.c $(HEADERS) | build
+	$(CC) $(CFLAGS) -c $< -o $@
 
-parser.o: parser.c parser.h lexer.h
-	$(CC) $(CFLAGS) -c parser.c
-
-interpreter.o: interpreter.c interpreter.h parser.h lexer.h
-	$(CC) $(CFLAGS) -c interpreter.c
+build:
+	mkdir -p build
 
 clean:
 	rm -f $(OBJS) $(TARGET)
 
-.PHONY: all clean
+.PHONY: all clean $(EXAMPLES)

@@ -17,7 +17,7 @@ typedef struct {
 
 typedef struct {
     char *source;
-    int position;
+    size_t position;
 } Lexer;
 
 Token *create_token(TokenType type, const char *value);

@@ -12,7 +12,6 @@ typedef struct {
     int value;
 } Variable;
 
-// tworzy nowa zmienna
 Variable *create_variable(const char *name, int value){
     Variable *variable = malloc(sizeof(Variable));
     if(!variable){
@@ -31,7 +30,6 @@ Variable *create_variable(const char *name, int value){
     return variable;
 }
 
-// zwalnia pamiec przydzielona na zmienna
 void free_variable(Variable *variable){
     if(variable){
         free(variable->name);
@@ -39,13 +37,11 @@ void free_variable(Variable *variable){
     }
 }
 
-// tablica wskaznikow do zmiennych
 typedef struct {
     Variable **variables;
     int count;
 } Environment;
 
-// tworzy srodowisko
 Environment *create_environment(void){
     Environment *env = malloc(sizeof(Environment));
     if(!env){
@@ -58,7 +54,6 @@ Environment *create_environment(void){
     return env;
 }
 
-// zwalnia pamiec przydzielona na srodowisko
 void free_environment(Environment *env){
     if(env){
         for(int i = 0; i < env->count; i++){
@@ -69,7 +64,6 @@ void free_environment(Environment *env){
     }
 }
 
-// szuka zmiennej w srodowisku po nazwie
 Variable *find_variable(Environment *env, const char *name){
     for(int i = 0; i < env->count; i++){
         if(strcmp(env->variables[i]->name, name) == 0){
@@ -79,7 +73,6 @@ Variable *find_variable(Environment *env, const char *name){
     return NULL;
 }
 
-// dodaje nowa zmienna do srodowiska
 void add_variables(Environment *env, Variable *variable){
     Variable **variables = realloc(env->variables, (env->count + 1) * sizeof(Variable *));
     if(!variables){
@@ -92,7 +85,6 @@ void add_variables(Environment *env, Variable *variable){
     env->count++;
 }
 
-// ocenia wartosc wyrazenia
 int evaluate_expression(Environment *env, ASTNode *node){
     if(node->type != 5) {
         printf("To nie jest wyrazenie!\n");
@@ -200,7 +192,7 @@ void interpret_statement(Environment *env, ASTNode *node){
     }
     else if(node->type == 4) { // if
         int condition = evaluate_expression(env, node->if_condition);
-        if(condition != 0) { // jezeli warunek jest prawdziwy
+        if(condition != 0) {
             ASTNode *current = node->if_body;
             while(current){
                 interpret_statement(env, current);

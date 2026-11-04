@@ -9,21 +9,16 @@
 typedef struct ASTNode {
     int type; // 1=print, 2=input, 3=assignment, 4=if, 5=expression
     
-    // dla print
     struct ASTNode *print_expression;
     
-    // dla input
     char *input_identifier;
     
-    // dla assignment
     char *assign_identifier;
     struct ASTNode *assign_expression;
     
-    // dla if
     struct ASTNode *if_condition;
     struct ASTNode *if_body;
     
-    // dla expression
     int expr_type; // 1=binary, 2=number, 3=identifier
     struct ASTNode *expr_left;
     char expr_op;
@@ -36,7 +31,7 @@ typedef struct ASTNode {
 
 typedef struct {
     Token *tokens;
-    int position;
+    size_t position;
 } Parser;
 
 ASTNode *create_node(void);

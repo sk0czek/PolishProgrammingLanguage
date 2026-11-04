@@ -1,0 +1,22 @@
+value = 3;
+
+jezeli(value) {
+    wyswietl(value); // 3
+    value = value - 1;
+
+    jezeli(value) {
+        wyswietl(value); // 2
+    }
+}
+
+// Zero skips the entire block.
+jezeli(0) {
+    wyswietl(999);
+}
+
+// Negative values are also true.
+jezeli(-1) {
+    wyswietl(1);
+}
+
+wyswietl(value); // 2: assignments inside a block update the same variable.

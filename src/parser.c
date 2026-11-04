@@ -5,25 +5,19 @@
 #include <limits.h>
 #include "lexer.h"
 
-// definicja struktur - uproszczone
 typedef struct ASTNode {
     int type; // 1=print, 2=input, 3=assignment, 4=if, 5=expression
     
-    // dla print
     struct ASTNode *print_expression;
     
-    // dla input
     char *input_identifier;
     
-    // dla assignment
     char *assign_identifier;
     struct ASTNode *assign_expression;
     
-    // dla if
     struct ASTNode *if_condition;
     struct ASTNode *if_body;
     
-    // dla expression
     int expr_type; // 1=binary, 2=number, 3=identifier
     struct ASTNode *expr_left;
     char expr_op;
@@ -34,7 +28,6 @@ typedef struct ASTNode {
     struct ASTNode *next;
 } ASTNode;
 
-// funkcja tworzaca nowy wezel AST
 ASTNode *create_node(void){
     ASTNode *node = malloc(sizeof(ASTNode));
     if(!node){
@@ -42,7 +35,6 @@ ASTNode *create_node(void){
         exit(1);
     }
     
-    // zerujemy wszystko
     node->type = 0;
     node->print_expression = NULL;
     node->input_identifier = NULL;
@@ -61,7 +53,6 @@ ASTNode *create_node(void){
     return node;
 }
 
-// zwalnia pamiec uzywana przez wezel AST
 void free_node(ASTNode *node){
     while(node){
         ASTNode *next_node = node->next;
@@ -97,10 +88,9 @@ void free_node(ASTNode *node){
 
 typedef struct {
     Token *tokens;
-    int position;
+    size_t position;
 } Parser;
 
-// funkcja tworzaca nowy parser
 Parser *create_parser(Token *tokens){
     Parser *parser = malloc(sizeof(Parser));
     if(!parser){
@@ -112,25 +102,21 @@ Parser *create_parser(Token *tokens){
     return parser;
 }
 
-// zwolnienie pamieci uzywanej przez parser
 void free_parser(Parser *parser){
     if(parser){
         free(parser);
     }
 }
 
-// funkcja zwraca aktualny token
 Token *current_token(Parser *parser){
     return &parser->tokens[parser->position];
 }
 
-// funkcja przesuwa parser do nastepnego tokenu
 Token *next_token(Parser *parser){
     parser->position++;
     return current_token(parser);
 }
 
-// funkcja oczekujaca konkretnego typu tokenu
 Token *expect_token(Parser *parser, TokenType type){
     Token *token = current_token(parser);
     if(token->type != type){
@@ -144,7 +130,7 @@ Token *expect_token(Parser *parser, TokenType type){
 ASTNode *parse_expression(Parser *parser);
 ASTNode *parse_statement(Parser *parser);
 
-// odczytuje liczbe z uwzglednieniem zakresu typu int
+// Parse the magnitude separately so INT_MIN remains a valid literal.
 static ASTNode *parse_number(Parser *parser, int negative){
     Token *token = current_token(parser);
     char *end;
@@ -169,7 +155,6 @@ static ASTNode *parse_number(Parser *parser, int negative){
     return node;
 }
 
-// liczba, zmienna lub wyrazenie w nawiasach
 static ASTNode *parse_primary(Parser *parser){
     Token *token = current_token(parser);
     if(token->type == TOKEN_NUMBER){
@@ -200,7 +185,6 @@ static ASTNode *parse_primary(Parser *parser){
     }
 }
 
-// plus i minus przed liczba, zmienna lub nawiasem
 static ASTNode *parse_unary(Parser *parser){
     TokenType type = current_token(parser)->type;
     if(type == TOKEN_PLUS || type == TOKEN_MINUS){
@@ -212,6 +196,7 @@ static ASTNode *parse_unary(Parser *parser){
             return parse_number(parser, 1);
         }
 
+        // Represent unary minus as 0 - operand.
         ASTNode *zero = create_node();
         zero->type = 5; // expression
         zero->expr_type = 2; // number
@@ -227,7 +212,7 @@ static ASTNode *parse_unary(Parser *parser){
     return parse_primary(parser);
 }
 
-// mnozenie i dzielenie maja wyzszy priorytet
+// Multiplication and division bind more tightly than addition and subtraction.
 static ASTNode *parse_term(Parser *parser){
     ASTNode *left = parse_unary(parser);
     while(current_token(parser)->type == TOKEN_STAR || current_token(parser)->type == TOKEN_SLASH){
@@ -245,7 +230,6 @@ static ASTNode *parse_term(Parser *parser){
     return left;
 }
 
-// funkcja parsujaca wyrazenia
 ASTNode *parse_expression(Parser *parser){
     ASTNode *left = parse_term(parser);
     while(current_token(parser)->type == TOKEN_PLUS || current_token(parser)->type == TOKEN_MINUS){

@@ -67,6 +67,12 @@ dkms.conf
 /polisz
 /interpreter
 
+# Build output
+/build/
+
+# Editor settings
+/.vscode/
+
 # Editor temporary files
 *.swp
 *.swo
